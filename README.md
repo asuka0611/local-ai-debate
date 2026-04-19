@@ -1,3 +1,5 @@
+本システムは複数AIが異なる役割を持ち、議論の過程を可視化することを目的としている。
+
 # ローカルAI討論システム
 
 ## 概要
@@ -35,3 +37,10 @@ AIの「結論」ではなく、「議論のプロセス」に価値を置いた
 ```bash
 make
 ./debate_cli
+
+
+## デモ動画
+
+AI同士がテーマについて議論する様子を確認できます。
+
+[![動画を見る](https://img.youtube.com/vi/jOyWaWsD2pI/0.jpg)](https://youtube.com/shorts/jOyWaWsD2pI)
