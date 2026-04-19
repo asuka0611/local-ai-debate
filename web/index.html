@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Debate</title>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0b0b0f;
+      color: #fff;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .phone {
+      width: 390px;
+      height: 844px;
+      background: #111318;
+      border-radius: 28px;
+      overflow: hidden;
+      border: 1px solid #262a33;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .header {
+      padding: 18px 16px 14px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 24px;
+      border-bottom: 1px solid #232833;
+      background: #151922;
+    }
+
+    .subheader {
+      font-size: 12px;
+      color: #9aa3b2;
+      margin-top: 4px;
+    }
+
+    .chat {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      background: linear-gradient(180deg, #111318 0%, #0c0e13 100%);
+    }
+
+    .bubble {
+      max-width: 84%;
+      padding: 10px 14px;
+      border-radius: 18px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 14px;
+    }
+
+    .user {
+      align-self: flex-end;
+      background: #0a84ff;
+      color: white;
+      border-bottom-right-radius: 6px;
+    }
+
+    .system {
+      align-self: center;
+      background: transparent;
+      color: #9aa3b2;
+      font-size: 12px;
+      padding: 0;
+      text-align: center;
+    }
+
+    .gpt {
+      align-self: flex-end;
+      background: #1677ff;
+      border-bottom-right-radius: 6px;
+    }
+
+    .claude {
+      align-self: flex-start;
+      background: #3a3f4c;
+      border-bottom-left-radius: 6px;
+    }
+
+    .grok {
+      align-self: flex-start;
+      background: linear-gradient(135deg, #7b00ff, #b000ff);
+      border-bottom-left-radius: 6px;
+    }
+
+    .gemini {
+      align-self: flex-start;
+      background: #0f766e;
+      border-bottom-left-radius: 6px;
+    }
+
+    .typing {
+      align-self: flex-start;
+      background: #222733;
+      color: #cbd5e1;
+      font-style: italic;
+      border-bottom-left-radius: 6px;
+    }
+
+    .composer {
+      display: flex;
+      gap: 10px;
+      padding: 12px;
+      border-top: 1px solid #232833;
+      background: #151922;
+    }
+
+    .composer input {
+      flex: 1;
+      padding: 14px 16px;
+      border-radius: 18px;
+      border: 1px solid #2b3240;
+      background: #0d1017;
+      color: white;
+      outline: none;
+      font-size: 14px;
+    }
+
+    .composer input::placeholder {
+      color: #7f8794;
+    }
+
+    .composer button {
+      border: none;
+      border-radius: 16px;
+      padding: 0 18px;
+      background: #0a84ff;
+      color: white;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .composer button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .name {
+      font-size: 11px;
+      opacity: 0.75;
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="header">
+      AI Debate
+      <div class="subheader">ローカルAI討論</div>
+    </div>
+
+    <div class="chat" id="chat">
+      <div class="bubble system">テーマを入力して開始</div>
+    </div>
+
+    <div class="composer">
+      <input id="theme" type="text" placeholder="テーマを入力" />
+      <button id="sendBtn">送信</button>
+    </div>
+  </div>
+
+  <script>
+    const chat = document.getElementById("chat");
+    const themeInput = document.getElementById("theme");
+    const sendBtn = document.getElementById("sendBtn");
+
+    let isSending = false;
+    let isComposing = false;
+
+    function scrollBottom() {
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function addBubble(type, text, label = "") {
+      const div = document.createElement("div");
+      div.className = `bubble ${type}`;
+
+      if (label) {
+        const name = document.createElement("div");
+        name.className = "name";
+        name.textContent = label;
+        div.appendChild(name);
+      }
+
+      const body = document.createElement("div");
+      body.textContent = text;
+      div.appendChild(body);
+
+      chat.appendChild(div);
+      scrollBottom();
+
+      return { wrap: div, body };
+    }
+
+    function resetChat(theme) {
+      chat.innerHTML = "";
+      addBubble("user", theme, "あなた");
+      addBubble("system", "討論を準備中...");
+    }
+
+    function classifyLine(line) {
+      if (line.startsWith("[GPT")) return { type: "gpt", label: "GPT" };
+      if (line.startsWith("[Claude")) return { type: "claude", label: "Claude" };
+      if (line.startsWith("[Grok")) return { type: "grok", label: "Grok" };
+      if (line.startsWith("[Gemini")) return { type: "gemini", label: "Gemini" };
+      return { type: "system", label: "" };
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function typeText(target, text, speed = 8) {
+      target.textContent = "";
+      for (let i = 0; i < text.length; i++) {
+        target.textContent += text[i];
+        scrollBottom();
+        await sleep(speed);
+      }
+    }
+
+    async function showThinkingThenMessage(type, label, text) {
+      const typing = addBubble("typing", "考え中...", "");
+      await sleep(700);
+      typing.wrap.remove();
+
+      const bubble = addBubble(type, "", label);
+      await typeText(bubble.body, text, 8);
+    }
+
+    async function startDebate() {
+      if (isSending) return;
+
+      const theme = themeInput.value.trim();
+      if (!theme) return;
+
+      isSending = true;
+      sendBtn.disabled = true;
+
+      resetChat(theme);
+      themeInput.value = "";
+
+      try {
+        const res = await fetch("http://localhost:3000/debate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ theme })
+        });
+
+        if (!res.ok) {
+          addBubble("system", `通信エラー: ${res.status}`);
+          isSending = false;
+          sendBtn.disabled = false;
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+        let firstMessageShown = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            buffer += decoder.decode();
+            break;
+          }
+
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line) continue;
+
+            if (line.includes("===")) continue;
+            if (line.startsWith("テーマ:")) continue;
+            if (line === "考え中..." || line === "考え中") continue;
+
+            if (line === "議論開始") {
+              continue;
+            }
+
+            if (line === "議論終了") {
+              addBubble("system", line);
+              continue;
+            }
+
+            if (line.startsWith("ターン")) {
+              addBubble("system", line);
+              continue;
+            }
+
+            const info = classifyLine(line);
+
+            if (info.type === "system") {
+              addBubble("system", line);
+            } else {
+              firstMessageShown = true;
+              await showThinkingThenMessage(info.type, info.label, line);
+            }
+          }
+        }
+
+        if (buffer.trim()) {
+          const line = buffer.trim();
+
+          if (
+            line !== "考え中..." &&
+            line !== "考え中" &&
+            !line.includes("===") &&
+            !line.startsWith("テーマ:")
+          ) {
+            const info = classifyLine(line);
+
+            if (info.type === "system") {
+              addBubble("system", line);
+            } else {
+              await showThinkingThenMessage(info.type, info.label, line);
+            }
+          }
+        }
+
+        if (!firstMessageShown) {
+          addBubble("system", "応答がありませんでした");
+        }
+
+      } catch (err) {
+        addBubble("system", "接続に失敗しました");
+      }
+
+      isSending = false;
+      sendBtn.disabled = false;
+      themeInput.focus();
+    }
+
+    sendBtn.addEventListener("click", startDebate);
+
+    themeInput.addEventListener("compositionstart", () => {
+      isComposing = true;
+    });
+
+    themeInput.addEventListener("compositionend", () => {
+      isComposing = false;
+    });
+
+    themeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !isComposing) {
+        e.preventDefault();
+        startDebate();
+      }
+    });
+  </script>
+</body>
+</html>
